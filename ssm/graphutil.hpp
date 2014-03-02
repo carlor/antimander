@@ -27,4 +27,7 @@ private:
 void findPseudoDiameter(SSMGraph* g, int* arr, int m0, DD* dds);
 DD calcDD(SSMGraph* g, size_t vtx, int* arr, int m0);
 
+int verifyCC(SSMGraph* g);
+void markChildren(SSMGraph* g, bool* marked, size_t vtx);
+
 #endif

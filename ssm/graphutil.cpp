@@ -121,3 +121,35 @@ int DDDiff::d(size_t v) {
 bool DDDiff::operator() (size_t a, size_t b) {
     return d(a) < d(b);
 }
+
+int verifyCC(SSMGraph* g) {
+    size_t glen = g->length();
+
+    bool* marked = new bool[glen];
+    for (size_t i=0; i < glen; i++) {
+        marked[i] = false;
+    }
+
+    markChildren(g, marked, 0);
+
+    for (size_t i=0; i < glen; i++) {
+        if (!marked[i]) {
+            std::cerr << "Not a connected component; " << i;
+            std::cerr <<" doesn't connect to 0." << std::endl;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void markChildren(SSMGraph* g, bool* marked, size_t vtx) {
+    marked[vtx] = true;
+    size_t cnb = g->countNeighbors(vtx);
+    size_t* nbs = g->getNeighbors(vtx);
+    for(size_t i=0; i < cnb; i++) {
+        size_t nb = nbs[i];
+        if (!marked[nb]) {
+            markChildren(g, marked, nb);
+        }
+    }
+}

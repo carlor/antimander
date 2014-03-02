@@ -48,6 +48,8 @@ int ssmRead(SSMGraph* g) {
             g->setNeighbor(i, j, nb);
         }
     }
+
+    return verifyCC(g);
 }
 
 int ssmWrite(SSMGraph* g, int* sr) {
