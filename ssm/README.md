@@ -11,6 +11,7 @@ First, convert the census blocks into a textual graph format described thus:
     {vert0 weight} {vert0 number of neighbors} {neighbor 0} {neighbor 1} ...
     ...
 
+You can use `shp2ssm` to generate a graph like this.
 
 Run `ssm` thus, with `divs` as the number of districts desired:
 
