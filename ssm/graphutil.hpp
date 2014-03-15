@@ -6,18 +6,22 @@
 #define SSMGRAPHUTILINCLUDE
 
 #include "graph.hpp"
+#include <limits.h>
+
+typedef long long int DT;
+const DT DT_UNMARKED = LLONG_MAX-1;
 
 struct DD {
     size_t len;
     size_t root;
-    int* dist;
+    DT* dist;
     size_t max(int* arr, int mark);
 };
 
 class DDDiff {
 public:
     DDDiff(DD a, DD b);
-    int d(size_t v);
+    DT d(size_t v);
     bool operator() (size_t a, size_t b);
     bool markz;
 private:

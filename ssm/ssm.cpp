@@ -7,26 +7,76 @@
 #include "graphutil.hpp"
 
 #include <assert.h>
+#include <fstream>
 #include <iostream>
+#include <queue>
+#include <sstream>
+#include <string>
 #include <vector>
 
 int ssmMain(int argc, char** argv) {
-	if (argc >= 3 && !strcmp(argv[1], "divide")) {
-        int divs = atoi(argv[2]);
-        if (divs < 2) {
-            std::cerr << "{divs} should be 2 or more." << std::endl;
-            return 1;
+    std::queue<std::string> args;
+    for(int i=0; i < argc; i++) args.push(argv[i]);
+
+    int divs = 0;
+    bool showHelp = false;
+    std::string ddout;
+    int r = 0;
+
+    std::string pname = args.front();
+    args.pop();
+    while(!args.empty()) {
+        std::string arg = args.front();
+        args.pop();
+        if (arg == "divide") {
+            if (args.empty()) {
+                std::cerr << "divide requires an argument." << std::endl;
+                return 1;
+            }
+
+            std::stringstream divstr(args.front());
+            divstr >> divs;
+            args.pop();
+            if (divs < 2) {
+                std::cerr << "{divs} should be 2 or more." << std::endl;
+                return 1;
+            }
+        } else if (arg == "--help" || arg == "-h" || arg == "help") {
+            showHelp = true;
+        } else if (arg == "--ddout") {
+            if (args.empty()) {
+                std::cerr << "ddout requires an argument." << std::endl;
+                return 1;
+            }
+
+            ddout = args.front();
+            args.pop();
+        } else {
+            std::cerr << "Unrecognized argument '" << arg << "'." << std::endl;
+            showHelp = true;
+            r = 1;
         }
-        
-        SSMGraph g;
-        if (int r = ssmRead(&g)) return r;
-        int* sr = ssmDivide(&g, divs);
-        if (!sr) return 1;
-        return ssmWrite(&g, sr);
-	} else {
-	    std::cerr << "Usage: " << argv[0] << " divide {divs}" << std::endl;
-        return 1;
-	}
+    }
+
+    if (divs == 0 && showHelp == false) {
+        showHelp = true;
+        r = 1;
+    }
+
+    if (showHelp) {
+        std::cout << "Usage: " << pname << " [-h] divide {divs} [--ddout {dXd}]" << std::endl;
+        std::cout << std::endl;
+        std::cout << "    divide {divs}   divides into {divs} districts" << std::endl;
+        std::cout << "    --ddout {dXd}    outputs DDs to file {dXd}" << std::endl;
+        std::cout << "    --h, --help     shows this help" << std::endl;
+        return r;
+    }
+
+    SSMGraph g;
+    if (r = ssmRead(&g)) return r;
+    int* sr = ssmDivide(&g, divs, ddout);
+    if (!sr) return 1;
+    return ssmWrite(&g, sr);
 }
 
 int ssmRead(SSMGraph* g) {
@@ -61,7 +111,7 @@ int ssmWrite(SSMGraph* g, int* sr) {
     return 0;
 }
 
-int* ssmDivide(SSMGraph* g, int divs) {
+int* ssmDivide(SSMGraph* g, int divs, const std::string& ddout) {
     size_t glen = g->length();
     
     std::cerr << "initializing arr..." << std::endl;
@@ -77,11 +127,11 @@ int* ssmDivide(SSMGraph* g, int divs) {
         size += g->weight(i);
     }
     
-    splitImpl(g, divs, size, arr, 0, mark);
+    splitImpl(g, divs, size, arr, 0, mark, ddout);
     return arr;
 }
 
-void splitImpl(SSMGraph* g, int divs, Weight s0, int* arr, int m0, int& mn) {
+void splitImpl(SSMGraph* g, int divs, Weight s0, int* arr, int m0, int& mn, const std::string& ddout) {
     if (divs > 1) {
         int d1 = divs / 2;
         int d2 = divs - d1;
@@ -89,48 +139,54 @@ void splitImpl(SSMGraph* g, int divs, Weight s0, int* arr, int m0, int& mn) {
         
         int m1 = mn++;
         
-        s1 = dv3(g, arr, s1, m0, m1);
+        s1 = dv3(g, arr, s1, m0, m1, ddout);
         //std::cerr << m0 << " => " << s0-s1 << ", ";
         //std::cerr << m1 << " => " << s1 << std::endl;
-        splitImpl(g, d1, s1, arr, m1, mn);
-        splitImpl(g, d2, s0-s1, arr, m0, mn);
+        splitImpl(g, d1, s1, arr, m1, mn, ddout);
+        splitImpl(g, d2, s0-s1, arr, m0, mn, ddout);
     } else {
         std::cerr << "size of district " << m0 << " = " << s0 << std::endl;
     }
 }
 
-Weight dv3(SSMGraph* g, int* arr, Weight s1, int m0, int m1) {
+Weight dv3(SSMGraph* g, int* arr, Weight s1, int m0, int m1, const std::string& ddout) {
     size_t glen = g->length();
-    
-    DD pd[2];
-    findPseudoDiameter(g, arr, m0, pd);
-    
-    // TODO better heuristic
-    /*
-    slog("finding pd1...");
-    DD root = calcDD(g, SIZE_MAX, arr, m0);
-    size_t pd1r = root.max();
-    DD pd1 = calcDD(g, pd1r, arr, m0);
-    
-    slog("finding pd0...");
-    size_t pd0r = pd1.max();
-    DD pd0 = calcDD(g, pd0r, arr, m0);*/
-    
+
     std::cerr << "populating vlist..." << std::endl;
-    std::vector<int> vlist;
+    std::vector<size_t> vlist;
     for(size_t v=0; v<glen; v++) {
         if (arr[v] == m0) {
             vlist.push_back(v);
         }
     }
-    
-    //std::cerr << "~s0: " << i << ", s0: " << s0 << std::endl;
-    
+
+
+    DD pd[2];
+    findPseudoDiameter(g, arr, m0, pd);
     DDDiff ddd(pd[1], pd[0]);
-    
+
+    if (ddout.length()) {
+        std::stringstream m1s;
+        m1s << m1;
+        
+        std::string dds = ddout;
+        dds.replace(dds.find('X'), 1, m1s.str());
+        std::cerr << "recording " << dds << "..." << std::endl;
+        std::ofstream df(dds.c_str());
+        for (size_t i=0; i < glen; i++) {
+            if (arr[i] == m0) {
+                df << ddd.d(i) << " ";
+            } else {
+                df << "0 ";
+            }
+        }
+        df << std::endl;
+        df.close();
+    }
+
     std::cerr << "sorting vlist..." << std::endl;
     std::sort(vlist.begin(), vlist.end(), ddd);
-    
+
     ddd.markz = true;
     size_t i = 0;
     Weight m = 0;
@@ -140,7 +196,7 @@ Weight dv3(SSMGraph* g, int* arr, Weight s1, int m0, int m1) {
         size_t prp = i; // where counting began
         size_t v0 = vlist[i];
         std::cerr << v0 << std::endl;
-        int df = ddd.d(v0);
+        DT df = ddd.d(v0);
         Weight mn = g->weight(v0);
         i++;
         

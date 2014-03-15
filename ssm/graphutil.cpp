@@ -49,10 +49,10 @@ void findPseudoDiameter(SSMGraph* g, int* arr, int m0, DD* dds) {
 
 DD calcDD(SSMGraph* g, size_t base, int* arr, int m0) {
     size_t glen = g->length();
-    int* dm = new int[glen];
+    DT* dm = new DT[glen];
     //SPQ::handle_type* hds = new SPQ::handle_type[glen];
     //SPQ* pq = new SPQ();
-    std::set<std::pair<int, size_t> > q;
+    std::set<std::pair<DT, size_t> > q;
     
     //slog("initializing dm, pq...");
     for(size_t i=0; i<glen; i++) {
@@ -61,7 +61,7 @@ DD calcDD(SSMGraph* g, size_t base, int* arr, int m0) {
                 base = i;
                 dm[i] = 0;
             } else {
-                dm[i] = INT_MAX-1; // because alt = dm[vtx] + 1
+                dm[i] = DT_UNMARKED; // because alt = dm[vtx] + 1
             }
             q.insert(std::make_pair(dm[i], i));
         }
@@ -71,12 +71,19 @@ DD calcDD(SSMGraph* g, size_t base, int* arr, int m0) {
     
     //slog("building dm...");
     while (!q.empty()) {
-        size_t v = q.begin()->second;
+        std::pair<DT, size_t> pr = *q.begin();
         q.erase(q.begin());
+
+        size_t v = pr.second;
+        if (pr.first == DT_UNMARKED) {
+            std::cerr << "DD Error! Vertex " << v << " isn't connected to " << base << std::endl;
+            throw std::string("DD Error"); 
+        }
+        
     //std::cerr << "d " << base << " -> " << v << " = " << dm[v] << std::endl;
         size_t nnb = g->countNeighbors(v);
         size_t* nbs = g->getNeighbors(v);
-        int alt = dm[v] + 1;
+        DT alt = dm[v] + 1;
         for(size_t i=0; i < nnb; i++) {
             size_t nb = nbs[i];
             if (arr[nb] == m0 && alt < dm[nb]) {
@@ -111,7 +118,7 @@ DDDiff::DDDiff(DD a, DD b) {
     markz = false;
 }
 
-int DDDiff::d(size_t v) {
+DT DDDiff::d(size_t v) {
     if (markz && v == 0) {
         std::cerr << "0! " << a.dist[0] << " " << b.dist[0] << std::endl;
     }
