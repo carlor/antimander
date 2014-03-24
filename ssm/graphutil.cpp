@@ -103,10 +103,12 @@ DD calcDD(SSMGraph* g, size_t base, int* arr, int m0) {
 }
 
 size_t DD::max(int* arr, int m) {
+    DT dk = -1;
     size_t k = 0;
     for(size_t i=0; i<len; i++) {
-        if (arr[i] == m && dist[i] > dist[k]) {
+        if (arr[i] == m && dist[i] > dk) {
             k = i;
+            dk = dist[k];
         }
     }
     return k;

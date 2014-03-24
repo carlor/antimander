@@ -105,7 +105,7 @@ int ssmRead(SSMGraph* g) {
 int ssmWrite(SSMGraph* g, int* sr) {
     size_t len = g->length();
     for (size_t i=0; i<len; i++) {
-        std::cout << sr[i] << ' ';
+        std::cout << sr[i] << '\n';
     }
     std::cout << std::endl;
     return 0;
@@ -175,9 +175,9 @@ Weight dv3(SSMGraph* g, int* arr, Weight s1, int m0, int m1, const std::string& 
         std::ofstream df(dds.c_str());
         for (size_t i=0; i < glen; i++) {
             if (arr[i] == m0) {
-                df << ddd.d(i) << " ";
+                df << ddd.d(i) << "\n";
             } else {
-                df << "0 ";
+                df << "0\n";
             }
         }
         df << std::endl;
