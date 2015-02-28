@@ -11,20 +11,23 @@
 typedef unsigned long long Weight;
 
 struct Point {
+    Point();
     Point(double x, double y, int entity);
     bool operator==(const Point& b) const;
+    bool operator<(const Point& b) const;
     double x, y;
     int entity;
+    double dist2(Point p);
 };
 
 bool point_lt(const Point& a, const Point& b);
 
-class Shpfile {
-public:
+struct Shpfile {
     int load(const char* ifname);
     void calculateNeighbors();
+    void connectIslands();
     int writeGraph();
-private:
+
     bool edgeBetween(int a, int b);
     void makeEdge(int a, int b);
     int readWeights(const char* ifname);

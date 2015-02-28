@@ -16,5 +16,6 @@ int main(int argc, char** argv) {
     Shpfile sp;
     if (sp.load(argv[1])) return 1;
     sp.calculateNeighbors();
+    sp.connectIslands();
     return sp.writeGraph();
 }
