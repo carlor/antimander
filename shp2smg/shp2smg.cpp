@@ -5,10 +5,12 @@
 #include "shp2smg.hpp"
 
 #include <assert.h>
+#include <fstream>
 #include <iostream>
 #include <math.h>
 #include <set>
 #include <shapefil.h>
+#include <stdlib.h>
 #include <utility>
 
 int Shpfile::load(const char* ifname) {
@@ -29,21 +31,42 @@ int Shpfile::load(const char* ifname) {
         SHPClose(hdl);
         return 1;
     }
-
+    
     weights = new Weight[nEntities];
 
+    int zero = 0;
     for(size_t i=0; i < nEntities; i++) {
         SHPObject* obj = SHPReadObject(hdl, i);
         if (obj) {
             weights[i] = 1;
-            for(size_t j = 0; j < obj->nVertices; j++) {
-                points.push_back(Point(obj->padfX[j], obj->padfY[j], i));
+            
+            int* pstart;
+            int parts = obj->nParts;
+            if (parts == 0) {
+                parts = 1;
+                pstart = &zero;
+            } else {
+                pstart = obj->panPartStart;
             }
+            
+            for(int j=0; j < parts; j++) {
+                int start = pstart[j];
+                int end = (j+1 == parts) ? obj->nVertices : pstart[j+1];
+                for(int k=start; k < end; k++) {
+                    int l = k+1;
+                    if (l == end) l = start;
+                    frontiers.encounter(i,
+                            Frontier(
+                                Point(obj->padfX[k], obj->padfY[k], i),
+                                Point(obj->padfX[l], obj->padfY[l], i)));
+                }
+            }
+            
             SHPDestroyObject(obj);
         }
         edges.push_back(std::set<int>());
 
-        if (i % 1000 == 0) {
+        if (i % 1024 == 0) {
             std::cerr << i << " / " << nEntities << std::endl;
         }
     }
@@ -118,41 +141,60 @@ struct Pairset {
 void Shpfile::calculateNeighbors() {
     std::cerr << "calculating neighbors..." << std::endl;
 
-    std::cerr << "sorting points..." << std::endl;
-    std::sort(points.begin(), points.end(), &point_lt);
+    std::cerr << "sorting edges..." << std::endl;
+    frontiers.sortByFrequency();
     std::cerr << "done sorting." << std::endl;
-
-    Pairset::Bkt encOnce;
-    for (int i=0; i < points.size();) {
-        int beg = i;
-        Point pi = points[i];
-        for(; i < points.size(); i++) {
-            if (i % 1000 == 0) std::cerr << i << " / " << points.size() << std::endl;
-            if (!(points[i] == pi)) break;
-        }
-
-        Pairset sofar;
-        for(int j=beg; j < i; j++) {
-            for(int k=j+1; k < i; k++) {
-                sofar.add(points[j].entity, points[k].entity);
+    
+    FVec::iterator it, end;
+    end = frontiers.inlands.end();
+    for(it = frontiers.inlands.begin(); it != end; it++) {
+        size_t nents = frontiers.freq(*it);
+        if (nents > 2) {
+            std::cerr << "threesome frontier at";
+            ISet is = frontiers.entities(*it);
+            for(ISet::iterator jt = is.begin(); jt != is.end(); jt++) {
+                std::cerr << " " << *jt;
             }
-        }
-
-        for (Pairset::iterator j=sofar.begin(); j != sofar.end(); j++) {
-            if (!edgeBetween(j->first, j->second)) {
-                Pairset::iterator fc = encOnce.find(*j);
-                if (fc == encOnce.end()) {
-                    encOnce.insert(*j);
-                } else {
-                    encOnce.erase(*j);
-                    makeEdge(j->first, j->second);
-                }
+            std::cerr << " " << it->a.x << " " << it->a.y
+                      << " " << it->b.x << " " << it->b.y;
+            std::cerr << std::endl;
+        } else if (nents == 2) {
+            ISet is = frontiers.entities(*it);
+            std::vector<int> jt(is.begin(), is.end());
+            //std::cerr << "n2 " << jt.size() << std::endl;
+            int a = jt[0];
+            int b = jt[1];
+            if (!edgeBetween(a, b)) {
+                makeEdge(a, b);
             }
         }
     }
 }
 
 int Shpfile::writeGraph() {
+/*
+    std::cerr << "writing coasts" << std::endl;
+    SHPHandle hdl = SHPCreate(getenv("COASTS"), SHPT_ARC);
+    std::ofstream of(getenv("COASTSLOG"));
+    of.precision(10);
+    for(int i=0; i < frontiers.coasts.size(); i++) {
+        if (i % 1024 == 0) std::cerr << i << " / " << frontiers.coasts.size() << std::endl;
+        double db[4];
+        db[0] = frontiers.coasts[i].a.x;
+        db[1] = frontiers.coasts[i].b.x;
+        db[2] = frontiers.coasts[i].a.y;
+        db[3] = frontiers.coasts[i].b.y;
+        of << i << "\t" << db[0] << "\t" << db[1]
+                << "\t" << db[2] << "\t" << db[3] << std::endl;
+        SHPObject* obj = SHPCreateSimpleObject(SHPT_ARC, 2, db, db+2, NULL);
+        SHPWriteObject(hdl, -1, obj);
+        SHPDestroyObject(obj);
+    }
+    of.close();
+    SHPClose(hdl);
+*/
+    
+    std::cerr << "writing graph" << std::endl;
     std::cout << nEntities << std::endl;
     for(int i=0; i < nEntities; i++) {
         std::set<int> ed = edges[i];
@@ -176,19 +218,4 @@ void Shpfile::makeEdge(int a, int b) {
     edges[b].insert(a);
 }
 
-bool point_lt(const Point& a, const Point& b) {
-    if (a.x < b.x) return true;
-    if (a.x > b.x) return false;
-    return a.y < b.y;
-}
 
-Point::Point(double x, double y, int entity) {
-    this->x = x;
-    this->y = y;
-    this->entity = entity;
-}
-
-// TODO tolerance
-bool Point::operator==(const Point& b) const {
-    return x == b.x && y == b.y;
-}
