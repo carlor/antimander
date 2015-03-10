@@ -1,6 +1,6 @@
 CXX=g++ -g
 
-SRCS=main.cpp shp2smg.cpp frontiers.cpp
+SRCS=main.cpp shp2smg.cpp islands.cpp frontiers.cpp
 OBJS=$(subst .cpp,.o,$(SRCS))
 
 all: build
@@ -8,5 +8,5 @@ all: build
 build: $(OBJS)
 	$(CXX) -lshp -o shp2smg $(OBJS)
 
-%.o: %.cpp shp2smg.hpp frontiers.hpp
+%.o: %.cpp shp2smg.hpp islands.hpp frontiers.hpp
 	$(CXX) -c $<

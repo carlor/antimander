@@ -16,8 +16,11 @@ class Shpfile {
 public:
     int load(const char* ifname);
     void calculateNeighbors();
+    void sbfYield(Frontier f, int freq);
+    void connectIslands();
     int writeGraph();
-private:
+    int writeCoasts();
+
     bool edgeBetween(int a, int b);
     void makeEdge(int a, int b);
     int readWeights(const char* ifname);
@@ -25,6 +28,7 @@ private:
     Weight* weights;
 
     Frontiers frontiers;
+    std::vector<Frontier> coasts;
     std::vector<std::set<int> > edges;
 };
 

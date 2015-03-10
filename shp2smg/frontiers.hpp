@@ -5,6 +5,7 @@
 #ifndef FRONTIERS_HPP
 #define	FRONTIERS_HPP
 
+#include <functional>
 #include <map>
 #include <set>
 #include <vector>
@@ -13,8 +14,10 @@ struct Point {
     Point();
     Point(double x, double y, int entity);
     bool operator==(const Point& b) const;
+    bool operator<(const Point& b) const;
     double x, y;
     int entity;
+    double dist2(Point p);    
 };
 
 bool point_lt(const Point& a, const Point& b);
@@ -43,9 +46,7 @@ typedef std::vector<Frontier> FVec;
 class Frontiers {
 public:
     void encounter(int id, Frontier f);
-    void sortByFrequency();
-    std::vector<Frontier> coasts;
-    std::vector<Frontier> inlands;
+    void sortByFrequency(void (*yield)(void*, Frontier, int), void* ctx);
     int freq(Frontier f);
     ISet entities(Frontier f);
 private:

@@ -31,6 +31,16 @@ bool Point::operator==(const Point& b) const {
     */return x == b.x && y == b.y;
 }
 
+bool Point::operator<(const Point& b) const {
+    return point_lt(*this, b);
+}
+
+double Point::dist2(Point p) {
+    double dx = x-p.x;
+    double dy = y-p.y;
+    return dx*dx + dy*dy;
+}
+
 /**** frontiers ****/
 Frontier::Frontier(const Point& a, const Point& b) {
     if (point_lt(b, a)) {
@@ -86,19 +96,14 @@ void Frontiers::encounter(int id, Frontier f) {
     }
 }*/
 
-void Frontiers::sortByFrequency() {
+void Frontiers::sortByFrequency(void (*yield)(void*, Frontier, int), void* ctx) {
     FMap::iterator it, end;
     end = backend.end();
     int size = backend.size();
     int i=0;
     for(it = backend.begin(); it != end; it++, i++) {
         if (i % 1024 == 0) std::cerr << i << " / " << size << std::endl;
-        if (it->second.size() < 2) {
-            coasts.push_back(it->first);
-        } else {
-            inlands.push_back(it->first);
-        }
-        
+        yield(ctx, it->first, it->second.size());
     }
 }
 

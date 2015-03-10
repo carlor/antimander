@@ -2,9 +2,11 @@
 // Copyright (C) 2014 Nathan M. Swan
 // Available under the GNU GPL (see LICENSE)
 
+#include "islands.hpp"
 #include "shp2smg.hpp"
 
 #include <assert.h>
+#include <float.h>
 #include <fstream>
 #include <iostream>
 #include <math.h>
@@ -138,52 +140,183 @@ struct Pairset {
     }
 };
 
+void sbf_yield(void* ctx, Frontier f, int freq);
+
 void Shpfile::calculateNeighbors() {
     std::cerr << "calculating neighbors..." << std::endl;
 
     std::cerr << "sorting edges..." << std::endl;
-    frontiers.sortByFrequency();
+    frontiers.sortByFrequency(sbf_yield, this);
     std::cerr << "done sorting." << std::endl;
     
-    FVec::iterator it, end;
-    end = frontiers.inlands.end();
-    for(it = frontiers.inlands.begin(); it != end; it++) {
-        size_t nents = frontiers.freq(*it);
-        if (nents > 2) {
-            std::cerr << "threesome frontier at";
-            ISet is = frontiers.entities(*it);
-            for(ISet::iterator jt = is.begin(); jt != is.end(); jt++) {
-                std::cerr << " " << *jt;
-            }
-            std::cerr << " " << it->a.x << " " << it->a.y
-                      << " " << it->b.x << " " << it->b.y;
-            std::cerr << std::endl;
-        } else if (nents == 2) {
-            ISet is = frontiers.entities(*it);
-            std::vector<int> jt(is.begin(), is.end());
-            //std::cerr << "n2 " << jt.size() << std::endl;
-            int a = jt[0];
-            int b = jt[1];
-            if (!edgeBetween(a, b)) {
-                makeEdge(a, b);
-            }
+    writeCoasts();
+}
+
+void sbf_yield(void* ctx, Frontier f, int freq) {   
+    ((Shpfile*)ctx)->sbfYield(f, freq);
+}
+
+void Shpfile::sbfYield(Frontier f, int freq) {
+    ISet is = frontiers.entities(f);
+    if (freq > 2) {
+        std::cerr << "threesome frontier at";
+        for(ISet::iterator jt = is.begin(); jt != is.end(); jt++) {
+            std::cerr << " " << *jt;
         }
+        std::cerr << " " << f.a.x << " " << f.a.y
+                  << " " << f.b.x << " " << f.b.y;
+        std::cerr << std::endl;
+    } else if (freq == 2) {
+        std::vector<int> jt(is.begin(), is.end());
+        //std::cerr << "n2 " << jt.size() << std::endl;
+        int a = jt[0];
+        int b = jt[1];
+        if (!edgeBetween(a, b)) {
+            makeEdge(a, b);
+        }
+    } else {
+        // nents == 1
+        coasts.push_back(f);
     }
 }
 
-int Shpfile::writeGraph() {
-/*
+bool ffn(void* ctx, int id) {
+    int** nctx = (int**) ctx;
+    return nctx[1][nctx[0][id]] == *(nctx[2]);
+}
+
+void Shpfile::connectIslands() {
+    /*pseudocode:
+    
+    comps = find connected components
+    sort comps by vertex count
+    until len(comps) == 1:
+        merge smallest comps to nearest comp
+     */
+    
+    std::cerr << "calculating islands..." << std::endl;
+    int* entIsland = new int[nEntities];
+    for(size_t i=0; i < nEntities; i++) {
+        entIsland[i] = -1;
+    }
+    
+    int nComps = 0;
+    for(size_t i=0; i < nEntities; i++) {
+        if (entIsland[i] == -1) {
+            //std::cerr << "island " << nComps << ": " << i <<  std::endl;
+            markChildren(this, entIsland, nComps++, i);
+        }
+    }
+    
+    std::cerr << nComps << " island(s) found..." << std::endl;
+    if (nComps == 1) return;
+    int* compSize = new int[nComps];
+    for(size_t i=0; i < nComps; i++) compSize[i] = 0;
+    for(size_t i=0; i < nEntities; i++) compSize[entIsland[i]]++;
+    
+#define ncp(ID) calc_newcomp(newcomp, (ID))
+#define ncpe(EID) ncp(entIsland[(EID)])
+    int* newcomp = new int[nComps];
+    for(size_t i=0; i < nComps; i++) newcomp[i] = i;
+
+    std::cerr << "classifying coasts..." << std::endl;
+    std::set<Point>* plists = new std::set<Point>[nComps];
+    for(size_t i=0; i < coasts.size(); i++) {
+        Frontier f = coasts[i];
+        int fe = *frontiers.entities(f).begin();
+        plists[entIsland[fe]].insert(f.a);
+        plists[entIsland[fe]].insert(f.b);
+    }
+    
+    std::cerr << "building tree..." << std::endl;
+    size_t nPoints = 0;
+    for(size_t i=0; i < nComps; i++) nPoints += plists[i].size();
+    Point* points = new Point[nPoints];
+    size_t pi=0;
+    for(size_t i=0; i < nComps; i++) {
+        for(std::set<Point>::iterator it = plists[i].begin(); it != plists[i].end(); it++) {
+            points[pi++] = *it;
+        }
+    }
+    Kdtree kdt(points, nPoints);
+    
+    std::cerr << "joining islands..." << std::endl;
+    /*for(int i=0; i < nComps; i++) {
+        std::cerr << plists[i].size() << " points for comp " << i << std::endl;
+    }
+    for(int i=0; i < nComps; i++) {
+        std::cerr << "sz " << i << "\t" << compSize[i] << std::endl;
+    }*/
+    
+    int min;
+    int* ctx[3];
+    ctx[0] = entIsland;
+    ctx[1] = newcomp;
+    ctx[2] = &min;
+    
+    int cleft = nComps;
+    while (cleft > 1) {
+        std::cerr << cleft << " islands left..." << std::endl;    
+        // find smallest island
+        min = ncp(0);
+        for(size_t i=0; i<nComps; i++) {
+            int ni = ncp(i);
+            newcomp[i] = ni;
+            if (compSize[ni] < compSize[min]) {
+                min = ni;
+            }
+        }
+        /*std::cerr << "i\tncp\tcs" << std::endl;
+        for(int i=0; i<nComps; i++) {
+            std::cerr << i << "\t" << newcomp[i] << "\t" << compSize[i] << "\t";
+            if (newcomp[i] == i) std::cerr << "*";
+            if (i == min) std::cerr << "<<";
+            std::cerr << std::endl;
+        }*/ 
+        
+        double maxd = DBL_MAX;
+        int comp = 0;
+        int pa, pb;
+        std::set<Point> island = plists[min];
+        std::set<Point>::iterator it;
+        for(it = island.begin(); it != island.end(); it++) {
+            Point p;
+            double dist = kdt.findNearest(*it, &p, &ffn, ctx, maxd);
+            if (dist < maxd) {
+                pa = it->entity;
+                pb = p.entity;
+                comp = ncpe(pb);
+                maxd = dist;
+            }
+        }
+        
+        std::cerr << "join " << min << " to " << comp
+                  << " at " << pa << " to " << pb << std::endl;
+        newcomp[min] = comp;
+        compSize[comp] += compSize[min];
+        plists[comp].insert(plists[min].begin(), plists[min].end());
+        makeEdge(pa, pb);
+        cleft--;
+    }
+}
+
+int Shpfile::writeCoasts() {
     std::cerr << "writing coasts" << std::endl;
-    SHPHandle hdl = SHPCreate(getenv("COASTS"), SHPT_ARC);
-    std::ofstream of(getenv("COASTSLOG"));
+    const char* cfile = getenv("COASTS");
+    if (cfile == NULL) cfile = "coasts_default.shp";
+    const char* clogfile = getenv("COASTSLOG");
+    if (clogfile == NULL) clogfile = "coasts_default_log.txt";
+    SHPHandle hdl = SHPCreate(cfile, SHPT_ARC);
+    if (!hdl) return 1;
+    std::ofstream of(clogfile);
     of.precision(10);
-    for(int i=0; i < frontiers.coasts.size(); i++) {
-        if (i % 1024 == 0) std::cerr << i << " / " << frontiers.coasts.size() << std::endl;
+    for(int i=0; i < coasts.size(); i++) {
+        if (i % 1024 == 0) std::cerr << i << " / " << coasts.size() << std::endl;
         double db[4];
-        db[0] = frontiers.coasts[i].a.x;
-        db[1] = frontiers.coasts[i].b.x;
-        db[2] = frontiers.coasts[i].a.y;
-        db[3] = frontiers.coasts[i].b.y;
+        db[0] = coasts[i].a.x;
+        db[1] = coasts[i].b.x;
+        db[2] = coasts[i].a.y;
+        db[3] = coasts[i].b.y;
         of << i << "\t" << db[0] << "\t" << db[1]
                 << "\t" << db[2] << "\t" << db[3] << std::endl;
         SHPObject* obj = SHPCreateSimpleObject(SHPT_ARC, 2, db, db+2, NULL);
@@ -192,8 +325,10 @@ int Shpfile::writeGraph() {
     }
     of.close();
     SHPClose(hdl);
-*/
-    
+    return 0;
+}
+
+int Shpfile::writeGraph() {
     std::cerr << "writing graph" << std::endl;
     std::cout << nEntities << std::endl;
     for(int i=0; i < nEntities; i++) {
