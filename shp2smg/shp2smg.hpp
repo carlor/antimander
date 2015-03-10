@@ -5,28 +5,21 @@
 #ifndef SHP2SMGINCLUDED
 #define SHP2SMGINCLUDED
 
+#include "frontiers.hpp"
+
 #include <set>
 #include <vector>
 
 typedef unsigned long long Weight;
 
-struct Point {
-    Point();
-    Point(double x, double y, int entity);
-    bool operator==(const Point& b) const;
-    bool operator<(const Point& b) const;
-    double x, y;
-    int entity;
-    double dist2(Point p);
-};
-
-bool point_lt(const Point& a, const Point& b);
-
-struct Shpfile {
+class Shpfile {
+public:
     int load(const char* ifname);
     void calculateNeighbors();
+    void sbfYield(Frontier f, int freq);
     void connectIslands();
     int writeGraph();
+    int writeCoasts();
 
     bool edgeBetween(int a, int b);
     void makeEdge(int a, int b);
@@ -34,7 +27,8 @@ struct Shpfile {
     int nEntities;
     Weight* weights;
 
-    std::vector<Point> points;
+    Frontiers frontiers;
+    std::vector<Frontier> coasts;
     std::vector<std::set<int> > edges;
 };
 

@@ -20,13 +20,14 @@ struct Kdnode {
 };
 
 typedef std::vector<Point>::iterator PointIt;
+typedef bool (*BlockFunc)(void*,int);
 
 struct Kdtree {
 public:
-    Kdtree(const std::vector<Point>& points);
+    Kdtree(const Point* points, size_t nPoints);
     //void insert(Point p);
     //void remove(Point p);
-    double findNearest(Point pt, Point* result, bool* block);
+    double findNearest(Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd);
 
 private:
     Kdnode* root;
@@ -36,7 +37,7 @@ private:
     //Kdnode* insert(Kdnode* nd, Point p, bool splitx);
     //Kdnode* remove(Kdnode* node, Point pt);
     //Kdnode* findMin(Kdnode* node, Kdnode* parent, bool axis, Kdnode** fparent);
-    double findNearest(Kdnode* node, Point pt, Point* result, bool* block, double min);
+    double findNearest(Kdnode* node, Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd);
 };
 
 #endif

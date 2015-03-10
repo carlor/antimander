@@ -31,8 +31,8 @@ Kdnode::Kdnode(Point pt, bool sx, Kdnode*  l, Kdnode* r) {
     right = r;
 }
 
-Kdtree::Kdtree(const std::vector<Point>& points) {
-    std::vector<Point> buffer(points.begin(), points.end());
+Kdtree::Kdtree(const Point* points, size_t nPoints) {
+    std::vector<Point> buffer(points, points+nPoints);
     bufbeg = buffer.begin();
     root = insert(true, buffer.begin(), buffer.end());
 }
@@ -58,7 +58,7 @@ Kdnode* Kdtree::insert(bool splitx, PointIt beg, PointIt end) {
     return new Kdnode(*mid, splitx, insert(!splitx, beg, mid), insert(!splitx, mid+1, end));
 }
 
-
+/*
 void Kdtree::insert(Point p) {
     root = insert(root, p, root ? root->splitx : false);
 }
@@ -79,7 +79,6 @@ Kdnode* Kdtree::insert(Kdnode* node, Point pt, bool splitx) {
     }
 }
 
-/*
 void Kdtree::remove(Point p) {
     root = remove(root, p);
 }
@@ -136,21 +135,21 @@ Kdnode* Kdtree::findMin(Kdnode* node, Kdnode* parent, bool axis, Kdnode** fparen
 }*/
 
 int checks, blocks;
-double Kdtree::findNearest(Point pt, Point* result, bool* block) {
+double Kdtree::findNearest(Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd) {
     checks = blocks = 0;
-    double r = findNearest(root, pt, result, block, DBL_MAX);
+    double r = findNearest(root, pt, result, block, blockCtx, maxd);
     //std::cerr << checks << " checks" << std::endl;
     //std::cerr << blocks << " blocks" << std::endl;
     return r;
 }
 
-double Kdtree::findNearest(Kdnode* node, Point pt, Point* result, bool* block, double min) {
+double Kdtree::findNearest(Kdnode* node, Point pt, Point* result, BlockFunc block, void* blockCtx, double min) {
     checks++;
     if (node == NULL) return min;
     
     double nd = node->point.dist2(pt);
     if (nd < min) {
-        if (block[node->point.entity]) {
+        if (block(blockCtx, node->point.entity)) {
             blocks++;
         } else {
             min = nd;
@@ -161,10 +160,10 @@ double Kdtree::findNearest(Kdnode* node, Point pt, Point* result, bool* block, d
     double nap = node->splitx ? node->point.x : node->point.y;
     double pap = node->splitx ? pt.x : pt.y;
     if (pap - min < nap) {
-        min = findNearest(node->left, pt, result, block, min);
+        min = findNearest(node->left, pt, result, block, blockCtx, min);
     }
     if (nap < pap + min) {
-        min = findNearest(node->right, pt, result, block, min);
+        min = findNearest(node->right, pt, result, block, blockCtx, min);
     }
     
     return min;
