@@ -135,15 +135,15 @@ Kdnode* Kdtree::findMin(Kdnode* node, Kdnode* parent, bool axis, Kdnode** fparen
 }*/
 
 int checks, blocks;
-double Kdtree::findNearest(Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd) {
+double Kdtree::findNearest(Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd, Point* opp) {
     checks = blocks = 0;
-    double r = findNearest(root, pt, result, block, blockCtx, maxd);
+    double r = findNearest(root, pt, result, block, blockCtx, maxd, opp);
     //std::cerr << checks << " checks" << std::endl;
     //std::cerr << blocks << " blocks" << std::endl;
     return r;
 }
 
-double Kdtree::findNearest(Kdnode* node, Point pt, Point* result, BlockFunc block, void* blockCtx, double min) {
+double Kdtree::findNearest(Kdnode* node, Point pt, Point* result, BlockFunc block, void* blockCtx, double min, Point* opp) {
     checks++;
     if (node == NULL) return min;
     
@@ -151,7 +151,7 @@ double Kdtree::findNearest(Kdnode* node, Point pt, Point* result, BlockFunc bloc
     if (nd < min) {
         if (block(blockCtx, node->point.entity)) {
             blocks++;
-        } else {
+        } else if (opp == NULL || nd < node->point.dist2(*opp)) {
             min = nd;
             *result = node->point; 
         }
@@ -160,10 +160,10 @@ double Kdtree::findNearest(Kdnode* node, Point pt, Point* result, BlockFunc bloc
     double nap = node->splitx ? node->point.x : node->point.y;
     double pap = node->splitx ? pt.x : pt.y;
     if (pap - min < nap) {
-        min = findNearest(node->left, pt, result, block, blockCtx, min);
+        min = findNearest(node->left, pt, result, block, blockCtx, min, opp);
     }
     if (nap < pap + min) {
-        min = findNearest(node->right, pt, result, block, blockCtx, min);
+        min = findNearest(node->right, pt, result, block, blockCtx, min, opp);
     }
     
     return min;

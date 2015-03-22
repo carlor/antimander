@@ -15,6 +15,7 @@ typedef unsigned long long Weight;
 class Shpfile {
 public:
     int load(const char* ifname);
+    void calculateMST();
     void calculateNeighbors();
     void sbfYield(Frontier f, int freq);
     void connectIslands();
@@ -26,7 +27,9 @@ public:
     int readWeights(const char* ifname);
     int nEntities;
     Weight* weights;
+    bool mst;
 
+    Point* points;
     Frontiers frontiers;
     std::vector<Frontier> coasts;
     std::vector<std::set<int> > edges;

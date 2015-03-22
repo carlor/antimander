@@ -6,6 +6,7 @@
 #define ISLANDSINCLUDED
 
 #include "shp2smg.hpp"
+#include <float.h>
 
 void markChildren(Shpfile* shp, int* entIsland, int mark, int node);
 int calc_newcomp(int* newcomp, int id);
@@ -27,7 +28,7 @@ public:
     Kdtree(const Point* points, size_t nPoints);
     //void insert(Point p);
     //void remove(Point p);
-    double findNearest(Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd);
+    double findNearest(Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd = DBL_MAX, Point* opp = NULL);
 
 private:
     Kdnode* root;
@@ -37,7 +38,7 @@ private:
     //Kdnode* insert(Kdnode* nd, Point p, bool splitx);
     //Kdnode* remove(Kdnode* node, Point pt);
     //Kdnode* findMin(Kdnode* node, Kdnode* parent, bool axis, Kdnode** fparent);
-    double findNearest(Kdnode* node, Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd);
+    double findNearest(Kdnode* node, Point pt, Point* result, BlockFunc block, void* blockCtx, double maxd, Point* opp);
 };
 
 #endif

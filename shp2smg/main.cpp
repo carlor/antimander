@@ -7,15 +7,23 @@
 #include <iostream>
 
 int main(int argc, char** argv) {
-    if (argc != 2) {
+    bool mst = false;
+    if (argc == 3 && (strcmp(argv[2], "--mst") || strcmp(argv[2], "--MST"))) {
+        mst = true;
+    } else if (argc != 2) {
         std::cerr << "Usage: " << argv[0]
             << " {arg}.shp > {arg}.smg" << std::endl;
         return 1;
     }
 
     Shpfile sp;
+    sp.mst = mst;
     if (sp.load(argv[1])) return 1;
-    sp.calculateNeighbors();
-    sp.connectIslands();
+    if (mst) {
+        sp.calculateMST();
+    } else {
+        sp.calculateNeighbors();
+        sp.connectIslands();
+    }
     return sp.writeGraph();
 }

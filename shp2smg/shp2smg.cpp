@@ -10,6 +10,7 @@
 #include <fstream>
 #include <iostream>
 #include <math.h>
+#include <queue>
 #include <set>
 #include <shapefil.h>
 #include <stdlib.h>
@@ -35,13 +36,21 @@ int Shpfile::load(const char* ifname) {
     }
     
     weights = new Weight[nEntities];
+    if (mst) {
+        points = new Point[nEntities];
+    }
 
     int zero = 0;
     for(size_t i=0; i < nEntities; i++) {
         SHPObject* obj = SHPReadObject(hdl, i);
-        if (obj) {
-            weights[i] = 1;
-            
+        weights[i] = 1;
+        if (!obj) continue;
+        if (mst) {
+            // TODO better algorithm here
+            points[i] = Point(
+                (obj->dfXMin+obj->dfXMax)/2,
+                (obj->dfYMin+obj->dfYMax)/2, i);
+        } else {
             int* pstart;
             int parts = obj->nParts;
             if (parts == 0) {
@@ -104,6 +113,186 @@ int Shpfile::readWeights(const char* ifname) {
     DBFClose(hdl);
     return 0;
 }
+
+struct UnionFind {
+    int* cp;
+    int* size;
+
+    UnionFind(int N) {
+        cp = new int[N];
+        size = new int[N];
+        for(int i=0; i<N; i++) {
+            cp[i] = i;
+            size[i] = 1;
+        }
+    }
+
+    int comp(int i) {
+        if (cp[i] == i) return i;
+        cp[i] = cp[cp[i]];
+        return comp(cp[i]);
+    }
+
+    void join(int a, int b) {
+        a = comp(a);
+        b = comp(b);
+        if (size[a] > size[b]) {
+            int t = a;
+            a = b;
+            b = t;
+        }
+        cp[a] = b;
+        size[b] += size[a];
+    }
+};
+
+bool bvk_block(void* ctx, int id) {
+    void** ptrs = (void**)ctx;
+    int a = *((int*)ptrs[0]);
+    UnionFind* uf = (UnionFind*)ptrs[1];
+    return uf->comp(a) == uf->comp(id);
+}
+
+struct CompNode {
+    double min;
+    int us, them;
+
+    CompNode() { min = DBL_MAX; }
+};
+
+void Shpfile::calculateMST() {
+    std::cerr << "Calculating MST..." << std::endl;
+
+    UnionFind uf(nEntities);
+    Kdtree tree(points, nEntities);
+
+    int ufsize = nEntities;
+    while(true) {
+        std::map<int, CompNode> comps;
+        for(int i=0; i<nEntities; i++) {
+            if (i % 1024 == 0) {
+                std::cerr << i << "\t/ " << nEntities
+                          << "\t(" << ufsize << ")" << std::endl;
+            }
+            int comp = uf.comp(i);
+
+            Point p;
+            void* ctx[2];
+            ctx[0] = &comp;
+            ctx[1] = &uf;
+            double dst = tree.findNearest(points[i], &p,
+                                            &bvk_block, ctx,
+                                            comps[comp].min);
+
+            if (dst < comps[comp].min) {
+                comps[comp].min = dst;
+                comps[comp].us = i;
+                comps[comp].them = uf.comp(p.entity);
+            }
+        }
+
+        ufsize = comps.size();
+        if (ufsize <= 1) break;
+
+        for(std::map<int, CompNode>::iterator it = comps.begin();
+                it != comps.end(); it++) {
+            int comp = it->first;
+            CompNode cn = it->second;
+            if (!edgeBetween(cn.us, cn.them)) {
+                makeEdge(cn.us, cn.them);
+            }
+            uf.join(comp, cn.them);
+        }
+    }
+}
+
+/*
+// attempt 1 (roughly Prim's or Kruskal's algorithm)
+struct PQNode {
+    double dist;
+    int vert, kin;
+
+    bool operator<(const PQNode& that) const {
+        return this->dist > that.dist;
+    }
+
+    bool operator==(const PQNode& that) const {
+        return this->dist == that.dist;
+    }
+};
+
+bool blockMarks(void* ctx, int id) {
+    bool* marks = (bool*)ctx;
+    return marks[id];
+}
+
+void Shpfile::calculateMST() {
+    std::cerr << "calculating MST..." << std::endl;
+    Kdtree tree(points, nEntities);
+    bool* marked = new bool[nEntities];
+    std::vector<int>* pointersTo = new std::vector<int>[nEntities];
+    for(int i=0; i<nEntities; i++) marked[i] = false;
+    std::priority_queue<PQNode> queue;
+    Point p;
+
+#define nst(ID, PT) tree.findNearest(points[(ID)], &p, &blockMarks, marked, DBL_MAX, (PT))
+    marked[0] = true;
+    PQNode nd, knd, vnd;
+    nd.vert = 0;
+    nd.dist = nst(0, NULL);
+    nd.kin = p.entity;
+    pointersTo[nd.kin].push_back(0);
+    queue.push(nd);
+
+    int mstSize = 1;
+    int fails = 0;
+    int ptts = 0;
+
+    while (mstSize < nEntities) {
+        if (mstSize % 1024 == 0) {
+            //std::cerr << "--------" << std::endl;
+            std::cerr << mstSize << " / " << nEntities << std::endl;
+            //std::cerr << "--------" << std::endl;
+        }
+        nd = queue.top();
+        queue.pop();
+
+        if (marked[nd.kin]) {
+            //std::cerr << "fail " << nd.vert << " -> " << nd.kin << std::endl;
+            fails++;
+            //nd.dist = nst(nd.vert);
+            //if (nd.dist < DBL_MAX) {
+            //    nd.kin = p.entity;
+            //    queue.push(nd);
+            //}
+        } else {
+            //std::cerr << nd.vert << " -> " << nd.kin << std::endl;
+            makeEdge(nd.vert, nd.kin);
+            marked[nd.kin] = true;
+            mstSize++;
+
+            knd.vert = nd.kin;
+            knd.dist = nst(knd.vert, &points[nd.vert]);
+            knd.kin = p.entity;
+            pointersTo[knd.kin].push_back(knd.vert);
+            queue.push(knd);
+
+            std::vector<int> ptt = pointersTo[nd.kin];
+            ptts += ptt.size();
+            for(int i=0; i<ptt.size(); i++) {
+                vnd.vert = ptt[i];
+                vnd.dist = nst(ptt[i], &(points[knd.vert]));
+                vnd.kin = p.entity;
+                pointersTo[vnd.kin].push_back(vnd.vert);
+                queue.push(vnd);
+            }
+        }
+    }
+    std::cerr << "fails:\t" << fails << std::endl;
+    std::cerr << "ptts:\t" << ptts << std::endl;
+    std::cerr << "mstsz:\t" << mstSize << std::endl;
+}
+*/
 
 struct Pairset {
     typedef std::set<std::pair<int, int> > Bkt;
