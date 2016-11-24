@@ -73,7 +73,7 @@ int ssmMain(int argc, char** argv) {
     }
 
     SSMGraph g;
-    if (r = ssmRead(&g)) return r;
+    if ((r = ssmRead(&g))) return r;
     int* sr = ssmDivide(&g, divs, ddout);
     if (!sr) return 1;
     return ssmWrite(&g, sr);
