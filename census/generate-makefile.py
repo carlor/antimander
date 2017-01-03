@@ -53,6 +53,7 @@ WEBFOLDER = http://www2.census.gov/geo/tiger/TIGER2010BLKPOPHU
 
 ''')
 
+mf.write('CODES = ' + ' '.join(codes) + '\n')
 mf.write('DBFS = ' + ' '.join(dbfs) + '\n')
 mf.write('SMOS = ' + ' '.join(smos) + '\n')
 mf.write('SMGS = ' + ' '.join(smgs) + '\n')
@@ -60,23 +61,33 @@ mf.write('SHPS = ' + ' '.join(shps) + '\n')
 mf.write('ZIPS = ' + ' '.join(zips) + '\n')
 
 mf.write('''
-.PHONY: dbfs smos smgs shps zips
+.PHONY: codes dbfs smos smgs shps zips make_ssm make_shp2smg make_smolod
+codes: ushr2010
 dbfs: $(DBFS)
 smos: $(SMOS)
 smgs: $(SMGS)
 shps: $(SHPS)
 zips: $(ZIPS)
 
-$(SSM):
+make_ssm:
 	$(MAKE) -C ../ssm
 
-$(SHP2SMG):
+make_shp2smg:
 	$(MAKE) -C ../shp2smg
 
-$(SMOLOD):
+make_smolod:
 	$(MAKE) -C ../smolod
 
+$(SSM): | make_ssm ;
+$(SHP2SMG): | make_shp2smg ;
+$(SMOLOD): | make_smolod ;
+
 ''')
+
+mf.write('.PHONY: '+' '.join(districts.keys())+'\n')
+for name, numd in districts.items():
+	mf.write(name+': '+' '.join([codes[i]+'_'+name for i in range(n) if int(numd[i]) > 1])+'\n')
+mf.write('\n')
 
 for i in range(n):
 	mf.write(zips[i]+':\n\tmkdir -p downloads/\n\twget -P downloads/ $(WEBFOLDER)/tabblock2010_'+nums[i]+'_pophu.zip\n')
@@ -90,15 +101,15 @@ for i in range(n):
 	mf.write(smgs[i]+': $(SHP2SMG) '+shps[i]+'\n\t$(SHP2SMG) '+shps[i]+' > '+codes[i]+'/'+codes[i]+'.smg\n')
 mf.write('\n')
 
-for i in range(n):
-	mf.write(smos[i]+': $(SSM) '+smgs[i]+'\n\t$(SSM) divide '+districts['ushr2010'][i]+' < '+smgs[i]+' > '+smos[i]+'\n')
-mf.write('\n')
-
 dt = datetime.datetime.now().isoformat()
-for i in range(n):
-	d = dbfs[i]
-	mf.write(codes[i]+': $(SMOLOD) '+smos[i]+'\n\t$(SMOLOD) '+smos[i]+' '+codes[i]+'/tabblock2010_'+nums[i]+'_pophu.dbf ssm-ushr2010-'+dt+'\n')
-mf.write('\n')
+for name, numd in districts.items():
+	for i in range(n):
+		if int(numd[i]) > 1:
+			key = codes[i] + '_' + name
+			smo = codes[i] + '/' + key + '.smo'
+			mf.write(smo+': $(SSM) '+smgs[i]+'\n\t$(SSM) divide '+numd[i]+' < '+smgs[i]+' > '+smo+'\n')
+			mf.write(key+': $(SMOLOD) '+smo+'\n\t$(SMOLOD) '+smo+' '+codes[i]+'/tabblock2010_'+nums[i]+'_pophu.dbf ssm_'+name+'_'+dt+'\n')
+	mf.write('\n')
 
 """
 for i in range(n):
