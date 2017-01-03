@@ -8,13 +8,18 @@
 #include <float.h>
 #include <iostream>
 
-void markChildren(Shpfile* shpfile, int* entIsland, int mark, int node) {
-    if (entIsland[node] == -1) {
-        entIsland[node] = mark;
-        //std::cerr << "mark " << node << " #" << mark << std::endl;
-        std::set<int> st = shpfile->edges[node];
-        for(std::set<int>::iterator it = st.begin(); it != st.end(); it++) {
-            markChildren(shpfile, entIsland, mark, *it);
+void markChildren(Shpfile* shpfile, int* entIsland, int mark, int startNode) {
+    std::set<int> queue;
+    queue.insert(startNode);
+    while(!queue.empty()) {
+        std::set<int>::iterator beg = queue.begin();
+        int node = *beg;
+        queue.erase(beg);
+        if (entIsland[node] == -1) {
+            entIsland[node] = mark;
+            //std::cerr << "mark " << node << " #" << mark << std::endl;
+            std::set<int> st = shpfile->edges[node];
+            queue.insert(st.begin(), st.end());
         }
     }
 }
